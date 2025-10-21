@@ -1,7 +1,9 @@
 from homeassistant import config_entries
 import voluptuous as vol
 from .api import SmartHubAPI
-from .const import DOMAIN, CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
+from .const import (
+    DOMAIN, CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL,
+    CONF_EMAIL, CONF_PASSWORD, CONF_ACCOUNT_ID, CONF_LOCATION_ID, CONF_HOST)
 
 import logging
 _LOGGER = logging.getLogger(__name__)
@@ -18,7 +20,7 @@ class SmartHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             # Generate a unique ID from input that should uniquely identify this account/host
             # This is crucial for Home Assistant to manage the integration instance.
-            unique_id = f"{user_input['email']}_{user_input['host']}_{user_input['account_id']}"
+            unique_id = f"{user_input[CONF_EMAIL]}_{user_input[CONF_HOST]}_{user_input[CONF_ACCOUNT_ID]}"
             
             # Set the unique ID for this config entry.
             # If an entry with this unique ID already exists, abort the flow.
@@ -28,11 +30,11 @@ class SmartHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 # Validate credentials by attempting to get a token
                 api = SmartHubAPI(
-                    email=user_input["email"],
-                    password=user_input["password"],
-                    account_id=user_input["account_id"],
-                    location_id=user_input["location_id"],
-                    host=user_input["host"],
+                    email=user_input[CONF_EMAIL],
+                    password=user_input[CONF_PASSWORD],
+                    account_id=user_input[CONF_ACCOUNT_ID],
+                    location_id=user_input[CONF_LOCATION_ID],
+                    host=user_input[CONF_HOST],
                 )
                 
                 # Note: If SmartHubAPI.get_token is not truly async (e.g., uses blocking requests),
@@ -55,12 +57,12 @@ class SmartHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Show the form again if validation failed or it's the first time
         schema = vol.Schema(
             {
-                vol.Required("email"): str,
-                vol.Required("password"): str,
-                vol.Required("account_id"): str,
-                vol.Required("location_id"): str,
-                vol.Required("host"): str,
-                vol.Optional(CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL): int,  # Poll interval in minutes
+            vol.Required(CONF_EMAIL): str,
+            vol.Required(CONF_PASSWORD): str,
+            vol.Required(CONF_ACCOUNT_ID): str,
+            vol.Required(CONF_LOCATION_ID): str,
+            vol.Required(CONF_HOST): str,
+            vol.Optional(CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL): int,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)

@@ -4,7 +4,7 @@ from datetime import timedelta
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_ACCOUNT_ID, CONF_EMAIL, CONF_HOST
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,20 +15,6 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     data = hass.data[DOMAIN][config_entry.entry_id]
     api = data["api"]
     poll_interval = data["poll_interval"]
-
-    # Use the unique_id from the config_entry as the base for the sensor's unique_id.
-    # If config_entry.unique_id is None (e.g., for older entries or failed config flow),
-    # fall back to config_entry.entry_id which is guaranteed to be unique for the entry.
-    base_unique_id = config_entry.unique_id
-    if base_unique_id is None:
-        _LOGGER.warning(
-            "Config entry unique_id is None for %s. Falling back to entry_id. "
-            "Consider deleting and re-adding the integration to get a proper unique_id.",
-            config_entry.entry_id
-        )
-        base_unique_id = config_entry.entry_id # Fallback to a guaranteed unique string
-
-    _LOGGER.debug(f"Base Unique ID for sensor: {base_unique_id}")
 
     # Create a coordinator to manage polling
     coordinator = DataUpdateCoordinator(
@@ -43,7 +29,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     await coordinator.async_refresh()
 
     # Create and add the sensor
-    sensors = [SmartHubEnergySensor(coordinator, base_unique_id)]
+    sensors = [SmartHubEnergySensor(coordinator, config_entry)]
     async_add_entities(sensors)
     _LOGGER.debug("Sensor entities added.")
 
@@ -51,10 +37,16 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 class SmartHubEnergySensor(CoordinatorEntity, SensorEntity):
     """Representation of the SmartHub Energy sensor."""
 
-    def __init__(self, coordinator, base_unique_id):
+    def __init__(self, coordinator, config_entry):
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._base_unique_id = base_unique_id
+
+        self.config = config_entry.data
+        self._base_unique_id = (
+            config_entry.unique_id
+            or config_entry.entry_id
+            or f"{self.config[CONF_EMAIL]}_{self.config[CONF_HOST]}_{self.config[CONF_ACCOUNT_ID]}")
+
         _LOGGER.debug(f"SmartHubEnergySensor initialized with base_unique_id: {self._base_unique_id}")
 
     @property
@@ -120,35 +112,15 @@ class SmartHubEnergySensor(CoordinatorEntity, SensorEntity):
 
         _LOGGER.debug(f"Attempting to parse device_info from base_unique_id: '{self._base_unique_id}'")
 
-        host_name = "Unknown Host" # Default if host can't be extracted
-        account_id_suffix = "Unknown Account" # Default if account ID can't be extracted
-        configuration_url = None
+        host_name = self.config.get(CONF_HOST, "Unknown Host")
+        account_id = self.config.get(CONF_ACCOUNT_ID, "Unknown Account")
+        configuration_url = f"https://{host_name}/" if host_name != "Unknown Host" else None
 
-        try:
-            parts = self._base_unique_id.split('_')
-            _LOGGER.debug(f"Parsed unique_id parts: {parts} (length: {len(parts)})")
-
-            # Assuming the format is email_host_account_id (3 parts)
-            if len(parts) >= 2:
-                host_name = parts[1] # This is the host part
-                if host_name: # Ensure it's not an empty string
-                    configuration_url = f"https://{host_name}/" # Or just http:// depending on your hub
-            if len(parts) >= 3:
-                account_id_suffix = parts[2] # This is the account_id part
-
-        except IndexError:
-            _LOGGER.debug(f"Base unique ID '{self._base_unique_id}' does not have enough parts for detailed device_info parsing (IndexError).")
-        except Exception as e:
-            _LOGGER.warning(f"Error parsing base_unique_id '{self._base_unique_id}' for device_info: {e}")
-            # Fallback for host_name and account_id_suffix if parsing fails
-            host_name = "Parsing Error"
-            account_id_suffix = "Parsing Error"
-
-        _LOGGER.debug(f"Device Info - Host: {host_name}, Account Suffix: {account_id_suffix}, Config URL: {configuration_url}")
+        _LOGGER.debug(f"Device Info - Host: {host_name}, Account ID: {account_id}, Config URL: {configuration_url}")
 
         return {
             "identifiers": {(DOMAIN, self._base_unique_id)},
-            "name": f"{host_name} ({account_id_suffix})", # Naming the device with the account ID for clarity
+            "name": f"{host_name} ({account_id})", # Naming the device with the account ID for clarity
             "manufacturer": "gagata",
             "model": "Energy Monitor",
             "configuration_url": configuration_url,

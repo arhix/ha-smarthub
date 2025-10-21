@@ -1,7 +1,10 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from .api import SmartHubAPI
-from .const import DOMAIN, CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
+from .const import (
+    DOMAIN, CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL, 
+    CONF_EMAIL, CONF_PASSWORD, CONF_ACCOUNT_ID, CONF_LOCATION_ID, CONF_HOST
+)
 
 import logging
 _LOGGER = logging.getLogger(__name__)
@@ -12,11 +15,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     # Initialize the API object
     api = SmartHubAPI(
-        email=config["email"],
-        password=config["password"],
-        account_id=config["account_id"],
-        location_id=config["location_id"],
-        host=config["host"],
+        email=config[CONF_EMAIL],
+        password=config[CONF_PASSWORD],
+        account_id=config[CONF_ACCOUNT_ID],
+        location_id=config[CONF_LOCATION_ID],
+        host=config[CONF_HOST],
     )
 
     # Store the API instance in hass.data
@@ -39,4 +42,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
         hass.data[DOMAIN].pop(entry.entry_id, None)
         return True
     return False
-
