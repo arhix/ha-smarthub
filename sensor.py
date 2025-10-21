@@ -1,7 +1,7 @@
 import logging
 from datetime import timedelta
 
-from homeassistant.helpers.entity import Entity
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 
 from .const import DOMAIN
@@ -48,7 +48,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     _LOGGER.debug("Sensor entities added.")
 
 
-class SmartHubEnergySensor(CoordinatorEntity, Entity):
+class SmartHubEnergySensor(CoordinatorEntity, SensorEntity):
     """Representation of the SmartHub Energy sensor."""
 
     def __init__(self, coordinator, base_unique_id):
@@ -82,7 +82,7 @@ class SmartHubEnergySensor(CoordinatorEntity, Entity):
         return f"{self._base_unique_id}_energy_usage"
 
     @property
-    def state(self):
+    def native_value(self):
         """Return the state of the sensor."""
         # Ensure that self.coordinator.data is not None before accessing it
         if self.coordinator.data is not None:
@@ -92,23 +92,22 @@ class SmartHubEnergySensor(CoordinatorEntity, Entity):
         return None # Return None if data is not available
 
     @property
-    def extra_state_attributes(self):
-        """Return additional attributes."""
-        # 'unit_of_measurement' is now a direct property,
-        # but you can add other relevant attributes from your API here if desired.
-        attrs = {
-            "icon": "mdi:power-plug",
-            "device_class":"energy",
-            "state_class":"total_increasing",
-        }
-        # Example: if your API provides other useful data, add it here
-        # if self.coordinator.data:
-        #     attrs["last_bill_date"] = self.coordinator.data.get("last_bill_date")
-        #     attrs["total_billed_energy"] = self.coordinator.data.get("total_billed_energy")
-        return attrs
+    def device_class(self):
+        """Return the device class of the sensor."""
+        return SensorDeviceClass.ENERGY
 
     @property
-    def unit_of_measurement(self):
+    def state_class(self):
+        """Return the state class of the sensor."""
+        return SensorStateClass.TOTAL_INCREASING
+
+    @property
+    def icon(self):
+        """Return the icon to use in the frontend."""
+        return "mdi:power-plug"
+
+    @property
+    def native_unit_of_measurement(self):
         """Return the unit of measurement."""
         return "kWh"
 
