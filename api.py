@@ -5,7 +5,7 @@ import asyncio
 
 _LOGGER = logging.getLogger(__name__)
 
-def parse_last_usage(data):
+def parse_industry(data, industry_key: str):
     """
     Parse the JSON data and extract the last data point for usage.
 
@@ -16,9 +16,9 @@ def parse_last_usage(data):
         dict: A dictionary containing the timestamp and value of the last usage point.
     """
     try:
-        # Locate the "ELECTRIC" data
-        electric_data = data.get("data", {}).get("ELECTRIC", [])
-        for entry in electric_data:
+        # Locate the industry data
+        industry_data = data.get("data", {}).get(industry_key, [])
+        for entry in industry_data:
             # Find the entry with type "USAGE"
             if entry.get("type") == "USAGE":
                 series = entry.get("series", [])
@@ -30,7 +30,7 @@ def parse_last_usage(data):
                         #timestamp = last_data_point.get("x")
                         value = last_data_point.get("y")
                         #return {"timestamp": timestamp, "value": value}
-                        return {"current_energy_usage": value}
+                        return value
 
         # If no usage data is found, return None
         return None
@@ -78,7 +78,7 @@ class SmartHubAPI:
                     raise RuntimeError("Failed to retrieve authorization token.")
                 _LOGGER.debug("Successfully retrieved token: %s", self.token)
 
-    async def get_energy_data(self):
+    async def get_data(self):
         """Retrieve energy usage data asynchronously with retry logic."""
         await self.get_token()
 
@@ -105,7 +105,7 @@ class SmartHubAPI:
             "includeDemand": False,
             "serviceLocationNumber": self.location_id,
             "accountNumber": self.account_id,
-            "industries": ["ELECTRIC"],
+            "industries": ["ELECTRIC", "GAS"],
             "startDateTime": str(start_timestamp),
             "endDateTime": str(end_timestamp),
         }
@@ -142,7 +142,10 @@ class SmartHubAPI:
                     else:
                         # Valid response received
                         _LOGGER.debug("Attempt %d: Successfully retrieved data.", attempt)
-                        return parse_last_usage(response_json)
+                        return {
+                            "current_energy_usage": parse_industry(response_json, "ELECTRIC"),
+                            "current_gas_usage": parse_industry(response_json, "GAS")
+                        }
 
         raise RuntimeError("Unexpected error: Retry loop exited without success.")
 

@@ -1,6 +1,7 @@
 import logging
 from datetime import timedelta
 
+from homeassistant.const import UnitOfVolume, UnitOfEnergy
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 
@@ -20,22 +21,25 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     coordinator = DataUpdateCoordinator(
         hass,
         _LOGGER,
-        name="SmartHub Energy",
-        update_method=api.get_energy_data,
+        name="SmartHub Coop",
+        update_method=api.get_data,
         update_interval=timedelta(minutes=poll_interval),
     )
 
     # Fetch initial data
     await coordinator.async_refresh()
 
-    # Create and add the sensor
-    sensors = [SmartHubEnergySensor(coordinator, config_entry)]
+    # Create and add the sensors
+    sensors = [
+        SmartHubEnergySensor(coordinator, config_entry),
+        SmartHubGasSensor(coordinator, config_entry),
+    ]
     async_add_entities(sensors)
     _LOGGER.debug("Sensor entities added.")
 
 
-class SmartHubEnergySensor(CoordinatorEntity, SensorEntity):
-    """Representation of the SmartHub Energy sensor."""
+class SmartHubUsageSensorBase(CoordinatorEntity, SensorEntity):
+    """Base class for SmartHub usage sensors (energy, gas)."""
 
     def __init__(self, coordinator, config_entry):
         """Initialize the sensor."""
@@ -47,7 +51,7 @@ class SmartHubEnergySensor(CoordinatorEntity, SensorEntity):
             or config_entry.entry_id
             or f"{self.config[CONF_EMAIL]}_{self.config[CONF_HOST]}_{self.config[CONF_ACCOUNT_ID]}")
 
-        _LOGGER.debug(f"SmartHubEnergySensor initialized with base_unique_id: {self._base_unique_id}")
+        _LOGGER.debug(f"{self.__class__.__name__} initialized with base_unique_id: {self._base_unique_id}")
 
     @property
     def name(self):
@@ -60,7 +64,7 @@ class SmartHubEnergySensor(CoordinatorEntity, SensorEntity):
         #         return f"SmartHub Energy Sensor (Account: {parts[2]})"
         # except Exception:
         #     pass # Fallback to generic name if split fails
-        return "SmartHub Energy Sensor"
+        return f"SmartHub {self.device_class.title()} Sensor"
 
     @property
     def unique_id(self):
@@ -71,37 +75,41 @@ class SmartHubEnergySensor(CoordinatorEntity, SensorEntity):
             _LOGGER.error("unique_id requested but _base_unique_id is None. This should not happen.")
             return None # Or raise an exception, though None is usually handled gracefully by HA
 
-        return f"{self._base_unique_id}_energy_usage"
+        return f"{self._base_unique_id}_{self.device_class}_usage"
 
     @property
     def native_value(self):
         """Return the state of the sensor."""
         # Ensure that self.coordinator.data is not None before accessing it
         if self.coordinator.data is not None:
-            return self.coordinator.data.get("current_energy_usage")
+            return self.coordinator.data.get(self.sensor_key)
 
-        _LOGGER.debug("Coordinator data is None or 'current_energy_usage' not found. Returning None for state.")
+        _LOGGER.debug(f"Coordinator data is None or '{self.sensor_key}' not found. Returning None for state.")
         return None # Return None if data is not available
 
     @property
     def device_class(self):
-        """Return the device class of the sensor."""
-        return SensorDeviceClass.ENERGY
-
+        """Return the device class of the sensor. Must be implemented by subclasses."""
+        raise NotImplementedError("Subclasses must implement device_class")
     @property
     def state_class(self):
         """Return the state class of the sensor."""
         return SensorStateClass.TOTAL_INCREASING
 
     @property
+    def sensor_key(self):
+        """Return the key to look up in coordinator data. Must be implemented by subclasses."""
+        raise NotImplementedError("Subclasses must implement sensor_key")
+
+    @property
     def icon(self):
-        """Return the icon to use in the frontend."""
-        return "mdi:power-plug"
+        """Return the icon to use in the frontend. Must be implemented by subclasses."""
+        raise NotImplementedError("Subclasses must implement icon")
 
     @property
     def native_unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return "kWh"
+        """Return the unit of measurement. Must be implemented by subclasses."""
+        raise NotImplementedError("Subclasses must implement native_unit_of_measurement")
 
     @property
     def device_info(self):
@@ -122,6 +130,54 @@ class SmartHubEnergySensor(CoordinatorEntity, SensorEntity):
             "identifiers": {(DOMAIN, self._base_unique_id)},
             "name": f"{host_name} ({account_id})", # Naming the device with the account ID for clarity
             "manufacturer": "gagata",
-            "model": "Energy Monitor",
+            "model": "SmartHub Monitor",
             "configuration_url": configuration_url,
         }
+
+
+class SmartHubEnergySensor(SmartHubUsageSensorBase):
+    """Representation of the SmartHub Energy sensor."""
+
+    @property
+    def sensor_key(self):
+        """Return the key for coordinator data lookup."""
+        return "current_energy_usage"
+
+    @property
+    def device_class(self):
+        """Return the device class of the sensor."""
+        return SensorDeviceClass.ENERGY
+
+    @property
+    def icon(self):
+        """Return the icon to use in the frontend."""
+        return "mdi:power-plug"
+
+    @property
+    def native_unit_of_measurement(self):
+        """Return the unit of measurement."""
+        return UnitOfEnergy.KILO_WATT_HOUR
+
+
+class SmartHubGasSensor(SmartHubUsageSensorBase):
+    """Representation of the SmartHub Gas sensor."""
+
+    @property
+    def sensor_key(self):
+        """Return the key for coordinator data lookup."""
+        return "current_gas_usage"
+
+    @property
+    def device_class(self):
+        """Return the device class of the sensor."""
+        return SensorDeviceClass.GAS
+
+    @property
+    def icon(self):
+        """Return the icon to use in the frontend."""
+        return "mdi:gas-cylinder"
+
+    @property
+    def native_unit_of_measurement(self):
+        """Return the unit of measurement."""
+        return UnitOfVolume.CUBIC_METERS
